@@ -12,46 +12,43 @@ import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JTextField;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 
-import com.fatecitu.ecl_cancela_automatica.dal.ConectaDB;
-import com.fatecitu.ecl_cancela_automatica.dal.DBdata;
+import com.fatecitu.ecl_cancela_automatica.dal.consultaAPI;
 import com.fatecitu.ecl_cancela_automatica.files.Arquivos;
 import com.fazecast.jSerialComm.SerialPort;
 
 public class Main {
-	static ConectaDB db;
+
 	static SerialPort portaArduino;
 	static Boolean salvaPorta = false;
 	static Boolean conectado = false;
 	
 	static JFrame janela = new JFrame("Main");
 	static JPanel painel = new JPanel();
+	static JTextArea infoText = new JTextArea("");
+	
+	//static Scanner input;
+	//static PrintWriter output;
 	
     public static void main(String[] args){
     	
+    	infoText.setEditable(false);
+
     	janela.setLayout(new BorderLayout());
     	janela.setSize(400, 400);
-    	janela.setResizable(false);
+
     	janela.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
     	janela.add(painel,BorderLayout.CENTER);
     	
-    	{
-    		DBdata DBdata = Arquivos.getDB();
-    		if(DBdata!=null) {
-    			db= new ConectaDB(DBdata);
-    			if(db.testaConexao()) {
-    				setJanelaConPorta();
-    			} else {
-    				setJanelaDBInfo();
-    			}
-    		} else {    			
-    			setJanelaDBInfo();
-    		}
+    	if(!Arquivos.getPorta().equals("")) {
+    		conectaPorta(Arquivos.getPorta());
+    			//setJanelaInfo();
+    	}else {    		
+    		setJanelaConPorta();
     	}
     	
     	janela.setVisible(true);
@@ -82,127 +79,114 @@ public class Main {
 		return portaSelecionada;
 		
     }
-    public static void conectaPorta(JComboBox<String> cbPortas, JButton btnConectar,JButton btnVoltar,String porta) {
-    	if(!conectado) {
-			portaArduino = selecionaPorta(porta);
-			if(portaArduino.openPort()) {
-				btnConectar.setText("Desconectar");
-				cbPortas.setEnabled(false);
-				btnVoltar.setEnabled(false);
-				conectado = true;
-			}
-			
-			Thread thread = new Thread() {
-				@Override public void run() {
-					Boolean valido= false;
-					Scanner input = new Scanner(portaArduino.getInputStream());
-					PrintWriter output = new PrintWriter(portaArduino.getOutputStream());
-					while(conectado) {	
-						if(input.hasNextLine()) {
-							try {
-								valido = db.verificar(input.nextLine().toString());
-								if(valido) {
-									output.print("ok");
-									output.flush();
-								}
-							}catch (Exception e) {
-								System.out.println(e);
+    public static void conectaPorta(String porta) {
+    	
+    	infoText.setText("");
+    	portaArduino = selecionaPorta(porta);
+    	
+    	if(portaArduino.openPort()) {
+    		conectado = true;
+    		setJanelaInfo();
+
+    	}
+    	Thread thread = new Thread() {
+    		@Override public void run() {
+
+    			String code = "";
+    			int i =0;
+    			Scanner input = new Scanner(portaArduino.getInputStream());
+    			PrintWriter output = new PrintWriter(portaArduino.getOutputStream());
+    			
+    			while(conectado) {
+
+    				i=i++;
+    				if(input.hasNextLine()) {
+    					try {
+    							System.out.println("inside try");
+    						code = consultaAPI.verificar(input.nextLine(), true);
+    						
+    						//dev
+    							infoText.insert('\n'+'['+i+']'+"[[DEV]] codigo recebido:"+code, 0);
+    						
+    						switch (code) {
+							case "109": //success
+								
+								output.print("ok");
+    							output.flush();
+    							
+    							infoText.insert('\n'+'['+i+']'+" Verificado com sucesso", 0);
+								
+								break;
+							case "502": //deactivated
+								
+								output.print("nope");
+    							output.flush();
+    							
+    							infoText.insert('\n'+'['+i+']'+" O usuário recebido esta desativado", 0);
+								
+								break;
+							case "503": //not found
+								
+								output.print("nope");
+    							output.flush();
+    							
+    							infoText.insert('\n'+'['+i+']'+" Usuário não encontrado", 0);
+								
+								break;
+							case "504": //Tag ID não pôde ser obtida
+								
+								output.print("nope");
+    							output.flush();
+    							
+    							infoText.insert('\n'+'['+i+']'+" Server:Tag ID não pôde ser obtida", 0);
+								
+								break;
+							case "505": //Erro na chave da API
+								
+								output.print("nope");
+    							output.flush();
+    							
+    							infoText.insert('\n'+'['+i+']'+" Server:Erro na chave da API", 0);
+								
+								break;
+							case "not200": //não pode conectar com o serv
+								
+								output.print("nope");
+    							output.flush();
+    							
+    							infoText.insert('\n'+'['+i+']'+" Não foi possivel conectar ao servidor", 0);
+								
+								break;
+							default:  //
+								
+								output.print("nope");
+    							output.flush();
+    							
+    							infoText.insert('\n'+'['+i+']'+" Erro desconhecido:\""+code+'"', 0);
+								
+								break;
 							}
-							
-						}
-					}
-					input.close();
-					output.close();
-				}
-			};
-			thread.start();
-			
-		} else {
-			portaArduino.closePort();
-			btnConectar.setText("Conectar");
-			cbPortas.setEnabled(true);
-			btnVoltar.setEnabled(true);
-			conectado = false;
-		}
+
+    					}catch (Exception e) {
+    						System.out.println(e);
+    					}
+    				}
+    				
+    			}
+    				
+    			input.close();
+    			output.close();
+    			portaArduino.closePort();
+    			setJanelaConPorta();
+    		}
+    	};
+    	if(conectado) {	
+    		thread.start();
+    	} else {
+    		setJanelaConPorta();
+    	}
     }
-    public static void setJanelaDBInfo() {
-    	
-    	painel.removeAll();
-    	painel.setLayout(new GridLayout(6, 2));
-    	
-    	JLabel labConex = new JLabel("  URL");
-    	JTextField tfStrConexao = new JTextField("jdbc:mysql://localhost:3306/<Database>", 1);
-    	painel.add(labConex);
-    	painel.add(tfStrConexao);
-    	
-    	JLabel labUser= new JLabel("  Usuario");
-    	JTextField tfUser = new JTextField();
-    	painel.add(labUser);
-    	painel.add(tfUser);
-    	
-    	JLabel labPass= new JLabel("  Senha");
-    	JTextField tfPass = new JTextField();
-    	painel.add(labPass);
-    	painel.add(tfPass);
-    	
-    	JLabel labTable= new JLabel("  Tabela");
-    	JTextField tfTable = new JTextField();
-    	painel.add(labTable);
-    	painel.add(tfTable);
-    	
-    	JLabel labColumn= new JLabel("  Coluna");
-    	JTextField tfColumn = new JTextField();
-    	painel.add(labColumn);
-    	painel.add(tfColumn);
-    	
-    	JButton btnprevDB = new JButton("Cancelar");
-    	JButton btnConDB = new JButton("Salvar e Conectar");
-    	painel.add(btnprevDB);
-    	painel.add(btnConDB);
-    	
-    	janela.setSize(500, 250);
-    	
-    	btnprevDB.addActionListener(new ActionListener() {
-			
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				
-				DBdata DBdata = Arquivos.getDB();
-				if(DBdata != null) {
-					db = new ConectaDB(DBdata);
-					if(db.testaConexao()) {
-						setJanelaConPorta();
-						
-					} else {
-						JOptionPane.showMessageDialog(janela,"Não foi possivel conectar ao banco de dados anterior");
-					}
-				} else {
-					JOptionPane.showMessageDialog(janela,"Não existem dados de conexão anteriores");
-				}
-				
-			}
-		});
-    	btnConDB.addActionListener(new ActionListener() {
-			
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				DBdata DBdata = new DBdata(tfStrConexao.getText(),
-										   tfUser.getText(), 
-										   tfPass.getText(), 
-										   tfTable.getText(), 
-										   tfColumn.getText()
-										  );
-				db = new ConectaDB(DBdata);
-				if(db.testaConexao()) {
-					Arquivos.salvaDB(DBdata);
-					setJanelaConPorta();
-				} else {
-					JOptionPane.showMessageDialog(janela, "Não foi possivel conectar");
-				}
-				
-			}
-		});
-    }
+    
     public static void setJanelaConPorta() {
     	
     	painel.removeAll();
@@ -211,12 +195,10 @@ public class Main {
     	JComboBox<String> cbPortas= new JComboBox<String>();
     	JButton btnConectar= new JButton("Conectar");
     	JCheckBox chSalvaPorta = new JCheckBox("Salvar porta como padrão");
-    	JButton btnVoltar = new JButton("Voltar");
     	
     	painel.add(cbPortas);
     	painel.add(btnConectar);
     	painel.add(chSalvaPorta);
-    	painel.add(btnVoltar);
     	
     	getPortas(cbPortas);
     	
@@ -238,26 +220,39 @@ public class Main {
 			public void actionPerformed(ActionEvent e) {
 				String[] porta = cbPortas.getSelectedItem().toString().split(" ");
 				
-				if(salvaPorta && !conectado) {
+				if(salvaPorta) {
 					Arquivos.salvaPorta(porta[0]);
 				}
 				
-				conectaPorta(cbPortas, btnConectar,btnVoltar,porta[0]);
+				conectaPorta(porta[0]);
+					//setJanelaInfo();
 				
 			}
 		});
     	
-    	btnVoltar.addActionListener(new ActionListener() {
+    }
+    public static void setJanelaInfo() {
+    	painel.removeAll();
+    	painel.setLayout(new BorderLayout());
+    	
+    	JButton btnDesconectar = new JButton("Desconectar");
+    	JScrollPane scrollPane = new JScrollPane(infoText);
+    	
+    	painel.add(btnDesconectar,BorderLayout.NORTH);
+    	painel.add(scrollPane,BorderLayout.CENTER);
+    	
+    	btnDesconectar.addActionListener(new ActionListener() {
 			
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				setJanelaDBInfo();
-				
+				conectado = false;
+					//setJanelaConPorta();
+				//input.close();
+				//output.close();
+				portaArduino.closePort();
 			}
 		});
     	
-    	if(!Arquivos.getPorta().equals("")) {
-    		conectaPorta(cbPortas, btnConectar,btnVoltar, Arquivos.getPorta());
-    	}
+    	janela.setSize(250, 250);
     }
 }
